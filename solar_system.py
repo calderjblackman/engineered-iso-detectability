@@ -6,8 +6,10 @@
 
 #HCD tags denote hardcoded values/parameters
 
-#current limitations:
-#if you are looking at exsiting bodies you must pass an observer when they are created in order to get ephem data from JPL
+#current limitations to address:
+#if you are looking at existing bodies you must pass an observer when they are created in order to get ephem data from JPL
+#LOS issues
+#angular res issues
 
 #astro
 from astroquery.jplhorizons import Horizons
@@ -39,14 +41,17 @@ class SolarSystem:
         self.ax = None #axis for animation
         self.slices_out  =None #boolean; output slices
         self.max_slices = None  #integer; max slices output
+        self.slice_plane = None #plane to take slice in
+        self.raw_out = None #output raw data
+        self.max_raw = None #max number raw files
         self.grid_2d = None #2d grid
         self.grid_3d = None #3d grid
         self.grid_type = None #grid type; None if no grid wanted
-        self.grid_observer = None #observer for grid
-        self.grid_band = None #band to do calcs for grid in
+        self.app_mag_observer = None #observer for grid
+        self.app_mag_band = None #band to do calcs for grid in
         self.grid_width = None #grid width
         self.grid_height = None #grid height
-        self.res = None #grid resolution
+        self.grid_res = None #grid resolution
         self.gridp_diam = None  #diam for grid points
         self.gridp_albedo = None #albedo for grid points
         self.run_name = None #track run name
@@ -102,8 +107,8 @@ class SolarSystem:
         #values: the corresponding Observer instance
         self.observers = {}
 
-        #list of active observers; defaults to all
-        self.active_observers = []
+        #subset of self.observers
+        self.active_observers = None
 
         #list of active bands; see run() for usage and limitations
         self.active_bands = None
@@ -134,6 +139,11 @@ class SolarSystem:
         
         if self.f is not None:
             self.f.write(f"SOLARSYSTEM created: name={self.name} \n")
+           
+    def __str__(self):
+        if self.name is not None:
+            return(self.name)
+        return 'SOLARSYSTEM has no identifier'
 
     #add an Observer instance
     def add_observer(self, is_generated, 
@@ -159,25 +169,50 @@ class SolarSystem:
             temp = 'obs'+str(self.gen_obs_id)
             self.gen_obs_id += 1
 
-        #instantiate object
-        self.observers[temp] = Observer(is_generated=is_generated,
-                #band info
-                bands=bands, absmag_sun=absmag_sun, 
-                #fov constraints
-                fov_table=fov_table, ra_min=ra_min, ra_max=ra_max, dec_min=dec_min, dec_max=dec_max,
-                #if not generated
-                name=name, origin=origin, epochs=self.epochs,
-                #if generated
-                id=temp, init_x=init_x, init_y=init_y, init_z=init_z, on_earth=on_earth,
-                #if is_orbiting
-                is_orbiting=is_orbiting, vect_table=vect_table, a=a, e=e, arg_per=arg_per, long_asc=long_asc, incl=incl, 
-                mean_anom=mean_anom,  
-                #if write outputs to text file
-                file=self.f)
-        
-        #store in SolarSystem
-        self.active_observers.append(temp)
-        self.bodies[temp] = []
+        #if, elif series prevents observers being duplicated
+        if type(temp) is str:
+            if temp not in self.observers:
+                #instantiate object
+                self.observers[temp] = Observer(is_generated=is_generated,
+                        #band info
+                        bands=bands, absmag_sun=absmag_sun, 
+                        #fov constraints
+                        fov_table=fov_table, ra_min=ra_min, ra_max=ra_max, dec_min=dec_min, dec_max=dec_max,
+                        #if not generated
+                        name=name, origin=origin, epochs=self.epochs,
+                        #if generated
+                        id=temp, init_x=init_x, init_y=init_y, init_z=init_z, on_earth=on_earth,
+                        #if is_orbiting
+                        is_orbiting=is_orbiting, vect_table=vect_table, a=a, e=e, arg_per=arg_per, long_asc=long_asc, incl=incl, 
+                        mean_anom=mean_anom,  
+                        #if write outputs to text file
+                        file=self.f)
+                
+                #store in SolarSystem
+                #self.active_observers[temp] = self.observers[temp]
+                self.bodies[temp] = []
+
+        elif type(temp) is int:
+            if int >= self.gen_obs_id:
+                #instantiate object
+                self.observers[temp] = Observer(is_generated=is_generated,
+                        #band info
+                        bands=bands, absmag_sun=absmag_sun, 
+                        #fov constraints
+                        fov_table=fov_table, ra_min=ra_min, ra_max=ra_max, dec_min=dec_min, dec_max=dec_max,
+                        #if not generated
+                        name=name, origin=origin, epochs=self.epochs,
+                        #if generated
+                        id=temp, init_x=init_x, init_y=init_y, init_z=init_z, on_earth=on_earth,
+                        #if is_orbiting
+                        is_orbiting=is_orbiting, vect_table=vect_table, a=a, e=e, arg_per=arg_per, long_asc=long_asc, incl=incl, 
+                        mean_anom=mean_anom,  
+                        #if write outputs to text file
+                        file=self.f)
+                
+                #store in SolarSystem
+                #self.active_observers[temp] = self.observers[temp]
+                self.bodies[temp] = []
 
     #add a Body instance     
     def add_body(self, is_generated,
@@ -230,10 +265,12 @@ class SolarSystem:
                  #if write outputs to text file
                  file=self.f))
         
-    def __str__(self):
-        if self.name is not None:
-            return(self.name)
-        return 'SOLARSYSTEM has no identifier'
+    #reset observers
+    def clear_observers(self):
+        self.observers = {}
+        self.active_observers = None
+        self.active_bands = None
+        self.gen_obs_id = 1
 
     # ----------------------------------------------------------------------------------- #
     # ---------------------------------- Run() Method ----------------------------------- #
@@ -242,46 +279,24 @@ class SolarSystem:
     #call this function to run; allows various runs and outputs with same SolarSystem instance
     #expects init_time, fin_time in form 'YEAR-MONTH-DAY'; for example:'2016-01-01'
     #expects step as integer
-    def run(self, run_name=None, active_observers=None, active_bands=None,
+    def run(self, run_name=None, output_type=None,
             #output controls
-            output_type=None, anim_type=False, slices_out=False, max_slices=5,
+            anim_type=None, slices_out=False, max_slices=5, slice_plane=None, raw_out=False, max_raw=5,
             #grid controls
-            grid_type=None, grid_observer=None, grid_band=None, grid_width=None, grid_height=None, res=None, gridp_diam=None, 
-            gridp_albedo=None):
+            grid_type=None, grid_width=None, grid_height=None, grid_res=None, 
+            gridp_diam=None, gridp_albedo=None,
+            #for output_type=='app_mag'
+            app_mag_observer=None, app_mag_band=None,
+            #for output_type=='observability'; 
+            #active_observers should be array with names of observers
+            #active_bands should be a dictionary with keys observer names and values an array of band names
+            active_observers=None, active_bands=None):
         
         if self.f is not None:
             self.f.write('run(): ROUTINE BEGINNING \n')
 
         #reset everything before new run
         self.reset()
-
-        # --------------------------------- SET ACTIVES --------------------------------- #
-        
-        #set active observers for run
-        if active_observers is not None:
-            if len(active_observers) == 0:
-                if self.f is not None:
-                    self.f.write('WARNING: no active observers; active_observers=[] \n')
-                else:
-                    print('WARNING: no active observers; active_observers=[]')
-
-            self.active_observers = active_observers
-
-        #set active bands for run; only allowed if a single observer is active (for now)
-        if active_bands is not None:
-            if len(active_observers) != 1:
-                if self.f is not None:
-                    self.f.write('ERROR: can only set active_bands if len(active_observers==1) \n')
-                else:
-                    print('can only set active_bands if len(active_observers==1)')
-            else:
-                if len(active_bands) == 0:
-                    if self.f is not None:
-                        self.f.write('WARNING: no active bands; active_bands=[] \n')
-                    else:
-                        print('WARNING: no active bands; active_bands=[]')
-
-                    self.active_bands = active_bands
 
         # ------------------------------- OUTPUT CONTROLS ------------------------------- #
 
@@ -305,17 +320,26 @@ class SolarSystem:
         #integer; max number of slices output; default is 5
         self.max_slices = max_slices
 
+        #plane to take slice in, in terms of height (no fancy planes, yet)
+        self.slice_plane = slice_plane
+
+        #boolean; output raw data arrays
+        self.raw_out = raw_out
+
+        #nmax number of raw files to output
+        self.max_raw = max_raw
+
         #controls if grid is used; expects string, either '2d' or '3d'
         self.grid_type = grid_type
 
         #observer to use for grid calcs; default is earth
         #if not default must be type Observer
-        self.grid_observer = grid_observer
+        self.app_mag_observer = app_mag_observer
 
         #band to use for grid calcs
         #expects string; only required if output type is 'app_mags'
-        #should be a band of the grid_observer, obviously
-        self.grid_band = grid_band
+        #should be a band of the app_mag_observer, obviously
+        self.app_mag_band = app_mag_band
 
         #width of grid in both x and y directions in AU
         #this is radius, i.e., distance either side of sun to build grid
@@ -326,10 +350,10 @@ class SolarSystem:
         self.grid_height = grid_height
 
         #resolution of grid; dist between bodies in KILOMETERS
-        self.res = res
+        self.grid_res = grid_res
 
         #convert res to AU
-        self.res = self.res * 6.6845871226706e-9
+        self.grid_res = self.grid_res * 6.6845871226706e-9
 
         #physical parameters for grid points
         self.gridp_diam = gridp_diam
@@ -368,35 +392,35 @@ class SolarSystem:
                                         #file
                                         file=self.f, write=False))
                         self.grid_count += 1
-                        y += self.res
+                        y += self.grid_res
 
                     self.grid_2d.append(temp_row)
-                    x += self.res
+                    x += self.grid_res
 
             #build 3d grid
             elif self.grid_type == '3d':
-                if self.f is not None:
-                    self.f.write('patience, this feature is in development \n')
-                else:
-                    print('patience, this feature is in development')
-
-                    # ---------- TO-DO: need to build 3D grid ---------- #
-
-            # #build 3d grid
-            # elif self.grid_type == '3d':
-            #     x, y, z = -self.width, -self.width, -self.height
-            #     while x < self.width:
-            #         while y < self.width:
-            #             while z < self.width:
-            #                 #generate stationary body in x,y,z position
-            #                 self.add_body(is_generated=True,
-            #                             #physical characteristics
-            #                             diam=self.grid_diam, albedo=self.grid_albedo, 
-            #                             #if generated
-            #                             id=f"BODY({x},{y},{z})", init_x=x, init_y=y, init_z=z)
-            #                 z += self.height
-            #             y += self.width
-            #         x += self.width
+                self.grid_3d = []
+                x = -self.grid_width
+                while x < self.grid_width:
+                    temp_row = []
+                    y = -self.grid_width
+                    while y < self.grid_width:
+                        temp_col = []
+                        z = -self.grid_height
+                        while z < self.grid_height:
+                            temp_col.append(Body(is_generated=True,
+                                            #physical characteristics
+                                            diam=self.gridp_diam, albedo=self.gridp_albedo, 
+                                            #if generated
+                                            id=f"BODY({x},{y},{z})", init_x=x, init_y=y, init_z=z,
+                                            #file
+                                            file=self.f, write=False))
+                            self.grid_count += 1
+                            z += self.grid_res
+                        temp_row.append(temp_col)
+                        y += self.grid_res
+                    self.grid_3d.append(temp_row)
+                    x += self.grid_res
 
             else:
                 if self.f is not None:
@@ -405,39 +429,63 @@ class SolarSystem:
                     print('ERROR in run(): grid_type parameter must be None, 2d, or 3d')
 
             if self.f is not None:
-                self.f.write(f"run(): GRID constructed; grid_count={self.grid_count} \n")
+                self.f.write(f"run(): GRID constructed; grid_type={self.grid_type}, grid_count={self.grid_count} \n")
 
             #set grid observer and band
-            if grid_observer is None or grid_band is None:
+            if app_mag_observer is None or app_mag_band is None:
                 if self.f is not None:
-                    self.f.write('ERROR: grid_observer=None and/or grid_band=None \n')
+                    self.f.write('ERROR: app_mag_observer=None and/or app_mag_band=None \n')
                 else:
-                    print('ERROR: grid_observer=None and/or grid_band=None')
+                    print('ERROR: app_mag_observer=None and/or app_mag_band=None')
        
                 
-            if type(grid_observer) == str:
-                if grid_observer in self.observers:
-                    self.grid_observer = self.observers[grid_observer]
+            if type(app_mag_observer) == str:
+                if app_mag_observer in self.observers:
+                    self.app_mag_observer = self.observers[app_mag_observer]
                 else:
                     if self.f is not None:
-                        self.f.write('ERROR: grid_observer is str but does not exist \n')
+                        self.f.write('ERROR: app_mag_observer is str but does not exist \n')
                     else:
-                        print('ERROR: grid_observer is str but does not exist')
+                        print('ERROR: app_mag_observer is str but does not exist')
 
             else:
-                self.grid_observer = grid_observer
+                self.app_mag_observer = app_mag_observer
 
                 try:   
-                    self.grid_observer.test()
+                    self.app_mag_observer.test()
                 except:         
                     if self.f is not None:
-                        self.f.write('ERROR: if grid_observer is not existing it must be new type Observer \n')
+                        self.f.write('ERROR: if app_mag_observer is not existing it must be new type Observer \n')
                     else:
-                        print('ERROR: if grid_observer is not existing it must be new type Observer')
+                        print('ERROR: if app_mag_observer is not existing it must be new type Observer')
 
-            self.grid_band = grid_band
+            self.app_mag_band = app_mag_band
 
-       
+        # --------------------------------- SET ACTIVES --------------------------------- #
+        
+        if self.output_type == 'observability':
+            #set active observers for run
+            if active_observers is not None:
+                if len(active_observers) == 0:
+                    if self.f is not None:
+                        self.f.write('WARNING: no active observers; active_observers=[] \n')
+                    else:
+                        print('WARNING: no active observers; active_observers=[]')
+
+                self.active_observers = {}
+                for obs in active_observers:
+                    self.active_observers[obs] = self.observers[obs]
+
+            #set active bands for run; only allowed if a single observer is active (for now)
+            if active_bands is not None:
+                if len(active_bands) == 0:
+                    if self.f is not None:
+                        self.f.write('WARNING: no active bans; active_bands=[] \n')
+                    else:
+                        print('WARNING: no active band; active_bands=[]')
+
+                self.active_bands = active_bands
+
         # -------------------------- MAIN LOOP (no animation) --------------------------- #
         
         if self.anim_type is None:
@@ -448,6 +496,12 @@ class SolarSystem:
                 #controls how often a slice is written
                 slice_freq = self.max_iter // self.max_slices
 
+            if self.raw_out:
+                curr_raw = 1
+
+                #controls how often raw file is written
+                raw_freq = self.max_iter // self.max_raw
+
             # ----- (actual) MAIN LOOP ----- #
             for iter in range(self.max_iter):
                 #write out heartbeat
@@ -455,9 +509,10 @@ class SolarSystem:
                     if self.f is not None:
                         self.f.write(f"HEARTBEAT: iteration={iter} \n")
 
-                #update position of all observers and bodies
+                # ----- UPDATE ALL POSITIONS ----- #
                 self.update(iter=iter)
 
+                # ----- SLICE OUTPUT ---- #
                 if self.slices_out:
                     #limit number of slices output (slice_freq should handle, for later use); don't want to write a bajillion files
                     if curr_slice > self.max_slices:
@@ -472,44 +527,40 @@ class SolarSystem:
                                     app_mags = []
 
                                     for row in self.grid_2d:
-                                        temp_row = []
+                                        app_mag_row = []
 
                                         for body in row:
-                                            #check if body is between earth and sun
-                                            # if eclipsing_sun(self.grid_observer, body, self.background['sun']):
-                                            #     temp_row.append(0)
-                                            if in_sun(self.background['sun'], body):
-                                                temp_row.append(0)
-                                            elif extreme_phase(self.grid_observer, body, self.background['sun']): #HCD
-                                                temp_row.append(0)
+                                            #HCD in position_checks()
+                                            if position_checks(self.app_mag_observer, body, self.background['sun']):
+                                                app_mag_row.append(0)
                                             else:
                                                 #do app mag calcs
-                                                temp_row.append(app_mag(self.grid_observer, self.grid_band, self.background['sun'], body))
+                                                app_mag_row.append(get_app_mag(self.app_mag_observer, self.app_mag_band, self.background['sun'], body))
 
-                                        app_mags.append(temp_row)
+                                        app_mags.append(app_mag_row)
 
                                     #create heatmap plot
                                     fig, ax = plt.subplots()
-                                    hmap = ax.pcolormesh(app_mag)
+                                    hmap = ax.pcolormesh(app_mags)
 
                                     #plot background bodies
                                     for name in self.background:
                                         if np.linalg.norm(np.array([self.background[name].get_xyz()])) < self.grid_width:
-                                            ax.plot(plt_sucks(self.background[name].get_xyz()[1], self.grid_width, 2 * self.grid_width // self.res), 
-                                                    plt_sucks(self.background[name].get_xyz()[0], self.grid_width, 2 * self.grid_width // self.res), 
+                                            ax.plot(plt_sucks(self.background[name].get_xyz()[1], self.grid_width, 2 * self.grid_width // self.grid_res), 
+                                                    plt_sucks(self.background[name].get_xyz()[0], self.grid_width, 2 * self.grid_width // self.grid_res), 
                                                     color='black', marker='o')
 
                                     #configer and save plot        
                                     ax.set_xticks([])
                                     ax.set_yticks([])
                                     fig.colorbar(hmap)
-                                    ax.set_title(f"{self.run_name}_slice{curr_slice} (iter={iter})")  
-                                    plt.savefig(f"outputs/{self.run_name}_slice{curr_slice}")
+                                    ax.set_title(f"{self.run_name}_slice{curr_slice}_appmag2d (iter={iter})")  
+                                    plt.savefig(f"outputs/{self.run_name}_slice{curr_slice}_appmag2d")
 
                                 elif self.grid_type == '3d':
                                     pass
 
-                                    # ---------- TO-DO: need to do 3d grid app_mag output ---------- #
+                                    # ---------- TO-DO: need to do 3d grid get_app_mag output ---------- #
 
                                     
                             #grid_type = None; no using a grid
@@ -520,12 +571,129 @@ class SolarSystem:
 
 
                         elif self.output_type == 'observability':
-                            pass
 
                             # ---------- TO-DO: need to do observability slice output ---------- #
                             #need consider both grid and not
 
+                            if self.grid_type is not None:
+                                if self.grid_type == '2d':
+                                    detected = []
+
+                                    if self.active_observers is not None:
+                                        for row in self.grid_2d:
+                                            detected_row = []
+
+                                            for body in row:
+                                                if is_detectable(body, self.background['sun'], self.active_observers, 
+                                                                 active_bands=self.active_bands):
+                                                    detected_row.append(1)
+                                                else:
+                                                    detected_row.append(0)
+                                            detected.append(detected_row)
+                                    
+                                    #use all observers, not active_observers
+                                    else:
+                                        for row in self.grid_2d:
+                                            detected_row = []
+
+                                            for body in row:
+                                                if is_detectable(body, self.background['sun'], self.observers, 
+                                                                 active_bands=self.active_bands):
+                                                    detected_row.append(1)
+                                                else:
+                                                    detected_row.append(0)
+                                            detected.append(detected_row)           
+                                                    
+                                    #create heatmap plot
+                                    fig, ax = plt.subplots()
+                                    hmap = ax.pcolormesh(detected)
+
+                                    #plot background bodies
+                                    for name in self.background:
+                                        if np.linalg.norm(np.array([self.background[name].get_xyz()])) < self.grid_width:
+                                            ax.plot(plt_sucks(self.background[name].get_xyz()[1], self.grid_width, 2 * self.grid_width // self.grid_res), 
+                                                    plt_sucks(self.background[name].get_xyz()[0], self.grid_width, 2 * self.grid_width // self.grid_res), 
+                                                    color='black', marker='o')
+
+                                    #configer and save plot        
+                                    ax.set_xticks([])
+                                    ax.set_yticks([])
+                                    fig.colorbar(hmap)
+                                    ax.set_title(f"{self.run_name}_slice{curr_slice}_obs2d (iter={iter})")  
+                                    plt.savefig(f"outputs/{self.run_name}_slice{curr_slice}_obs2d")
+
+                                elif self.grid_type == '3d':
+                                    pass
+
+                            #grid_type = None; no using a grid
+                            else:
+                                pass
+
+                                # ---------- TO-DO: need to do observability slice output ---------- #
+
                         curr_slice += 1
+
+                # ----- RAW FILE OUTPUT ----- #
+                if self.raw_out:
+                    #limit number of slices output (slice_freq should handle, for later use); don't want to write a bajillion files
+                    if curr_raw > self.max_raw:
+                        curr_raw = 1
+
+                    #only output (roughly) min number of slices requested; don't keep overwriting
+                    if iter % raw_freq == 0:
+                        #for app_mag output; this is grid of app mags
+                        if self.output_type == 'app_mag':
+                            if self.grid_type is not None:
+                                if self.grid_type == '2d':
+                                    pass
+
+                                elif self.grid_type == '3d':
+                                    raw = []
+
+                                    #build 3d array of apparent magnitudes
+                                    for row in self.grid_3d:
+                                        raw_row = []
+                                        for col in row:
+                                            raw_col = []
+                                            for body in col:
+                                                #HCD in position_checks()
+                                                if position_checks(self.app_mag_observer, body, self.background['sun']):
+                                                    app_mag = 0
+                                                else:
+                                                    #do app mag calcs
+                                                    app_mag = get_app_mag(self.app_mag_observer, self.app_mag_band, self.background['sun'], body)
+                                                raw_col.append(app_mag)
+                                            raw_row.append(raw_col)
+                                        raw.append(raw_row)
+                                    
+                                    #reshape array
+                                    raw = np.array(raw)
+                                    np.save(f"raw_outputs/{self.run_name}_raw{curr_raw}_appmag3d", raw)
+
+                            #grid_type = None; no using a grid
+                            else:
+                                pass
+
+                                # ---------- TO-DO: need to do observability slice output ---------- #
+
+
+                        elif self.output_type == 'observability':
+                            if self.grid_type == '2d':
+                                pass
+
+                            # ---------- TO-DO: need to do observability slice output ---------- #
+                            #need consider both grid and not
+
+                            elif self.grid_type == '3d':
+                                pass
+
+                            #grid_type = None; no using a grid
+                            else:
+                                pass
+
+                                # ---------- TO-DO: need to do observability slice output ---------- #
+
+                        curr_raw += 1
 
         # -------------------------- MAIN LOOP (w/ animation) --------------------------- #
 
@@ -543,7 +711,7 @@ class SolarSystem:
                     print('ERROR: invalid anim_type')
 
             anim = FuncAnimation(self.fig, self.animate, frames=self.max_iter)
-            anim.save(f"outputs/{self.run_name}_anim.mp4")
+            anim.save(f"outputs/{self.run_name}_anim_appmag2d.mp4")
 
         # -------------------------------- FINISH run() --------------------------------- #
 
@@ -597,21 +765,17 @@ class SolarSystem:
                     app_mags = []
 
                     for row in self.grid_2d:
-                        temp_row = []
+                        app_mag_row = []
 
                         for body in row:
-                            #check if body is between earth and sun
-                            # if eclipsing_sun(self.grid_observer, body, self.background['sun']):
-                            #     temp_row.append(0)
-                            if in_sun(self.background['sun'], body):
-                                temp_row.append(0)
-                            elif extreme_phase(self.grid_observer, body, self.background['sun']): #HCD
-                                temp_row.append(0)
+                            #HCD in position_checks()
+                            if position_checks(self.app_mag_observer, body, self.background['sun']):
+                                app_mag_row.append(0)
                             else:
                                 #do app mag calcs
-                                temp_row.append(app_mag(self.grid_observer, self.grid_band, self.background['sun'], body))
+                                app_mag_row.append(get_app_mag(self.app_mag_observer, self.app_mag_band, self.background['sun'], body))
 
-                        app_mags.append(temp_row)
+                        app_mags.append(app_mag_row)
 
                     #create heatmap plot
                     hmap = self.ax.pcolormesh(app_mags)
@@ -619,8 +783,8 @@ class SolarSystem:
                     #plot background bodies
                     for name in self.background:
                         if np.linalg.norm(np.array([self.background[name].get_xyz()])) < self.grid_width:
-                            self.ax.plot(plt_sucks(self.background[name].get_xyz()[1], self.grid_width, 2 * self.grid_width // self.res), 
-                                    plt_sucks(self.background[name].get_xyz()[0], self.grid_width, 2 * self.grid_width // self.res), 
+                            self.ax.plot(plt_sucks(self.background[name].get_xyz()[1], self.grid_width, 2 * self.grid_width // self.grid_res), 
+                                    plt_sucks(self.background[name].get_xyz()[0], self.grid_width, 2 * self.grid_width // self.grid_res), 
                                     color='black', marker='o')
 
                     #configer and save plot        
@@ -628,7 +792,7 @@ class SolarSystem:
                     self.ax.set_yticks([])
                     if iter == self.max_iter:
                         self.fig.colorbar(hmap)
-                    self.ax.set_title(f"{self.run_name}_anim")  
+                    self.ax.set_title(f"{self.run_name}_anim_appmag2d")  
 
                 elif self.grid_type == '3d':
                     pass

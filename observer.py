@@ -229,38 +229,40 @@ class Observer:
             self.y = self.vect_table[iter]['y']
             self.z = self.vect_table[iter]['z']
 
-    #check if body is in FOV of telescope at step (which corresponds to row in ephemeris)
-    def in_fov(self, body, step):
-        #UPDATE: if fov_table was given; expects astropy Table
-        if self.fov_table is not None:
-            ra_min = self.fov_table[step]['RA_min']
-            ra_max = self.fov_table[step]['RA_max']
-            dec_min = self.fov_table[step]['DEC_min']
-            dec_max = self.fov_table[step]['DEC_max']
+    # #check if body is in FOV of telescope at step (which corresponds to row in ephemeris)
+    # #UPDATE
+    # def in_fov(self, body, step):
+    #     #UPDATE: if fov_table was given; expects astropy Table
+    #     if self.fov_table is not None:
+    #         ra_min = self.fov_table[step]['RA_min']
+    #         ra_max = self.fov_table[step]['RA_max']
+    #         dec_min = self.fov_table[step]['DEC_min']
+    #         dec_max = self.fov_table[step]['DEC_max']
         
-        ra, dec = body.get_radec(step)
+    #     ra, dec = body.get_radec(step)
 
-        #perform check
-        if dec >= dec_min and dec <= dec_max and ra >= ra_min and ra <= ra_max:
-            return True #if in FOV
-        return False #if not in FOV
+    #     #perform check
+    #     if dec >= dec_min and dec <= dec_max and ra >= ra_min and ra <= ra_max:
+    #         return True #if in FOV
+    #     return False #if not in FOV
     
-    #required param is background, the list of background bodies stored in SolarSystem instance
-    def can_resolve(self, background_vals, body, step):
-        ra, dec = body.get_radec(step)
+    # #required param is background, the list of background bodies stored in SolarSystem instance
+    # #UPDATE
+    # def can_resolve(self, background_vals, body, step):
+    #     ra, dec = body.get_radec(step)
 
-        for mb in background_vals:
-            #can't get ra,dec for observer on earth
-            if not mb.is_earth:
-                mb_ra, mb_dec = mb.get_radec(step)
+    #     for mb in background_vals:
+    #         #can't get ra,dec for observer on earth
+    #         if not mb.is_earth:
+    #             mb_ra, mb_dec = mb.get_radec(step)
 
-                approx_dist = math.sqrt((ra - mb_ra)**2 + (dec - mb_dec)**2)
+    #             approx_dist = math.sqrt((ra - mb_ra)**2 + (dec - mb_dec)**2)
 
-                for band in self.bands: 
-                    if approx_dist <= self.bands[band][0]:
-                        return False, mb.get_name()
+    #             for band in self.bands: 
+    #                 if approx_dist <= self.bands[band][0]:
+    #                     return False, mb.get_name()
                         
-        return True, None
+    #     return True, None
     
     #return planmag of sun in given band
     def get_planmag_sun(self, band):
