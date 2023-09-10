@@ -23,11 +23,15 @@ from body import Body
 from observer import Observer
 from helpers import *
 
+#os
+import os
+import gc
+
 class SolarSystem:
     #background should be dictionary with keys names and values diameter in km
     def __init__(self, name=None, background=None, 
             #output controls
-            main_out=None,
+            main_out=None, f_name=None,
             #time controls
             epochs=None, start_time=None, fin_time=None, step=None, step_unit='d'):
         
@@ -60,12 +64,17 @@ class SolarSystem:
         #track number of gridpoints
         self.grid_count = 0
 
-         # -------------------------- MAIN OUTPUT FILE SETUP ---------------------------- #
+        # ------------------------------ OUTPUT DIR SETUP ------------------------------- #
+
+        if not os.path.isdir(f"outputs_{self.name}"):
+            os.mkdir(f"outputs_{self.name}")
+
+        # --------------------------- MAIN OUTPUT FILE SETUP ---------------------------- #
 
         #name of file that heartbeats and errors are written to
         if main_out is not None:
             self.main_out = main_out
-            self.f = open(main_out, 'w')
+            self.f = open(f"outputs_{self.name}/{main_out}", 'w')
             self.f.write('\n WHERE ARE THEY HIDING? \n') #WE GON FIND DA ALIENS
             self.f.write('\n created by calder blackman \n')
             self.f.write('\n BSRC internship 2023X \n')
@@ -113,10 +122,11 @@ class SolarSystem:
         #list of active bands; see run() for usage and limitations
         self.active_bands = None
 
-        #expects dictionary with
-        #keys: observer name
-        #vals: array of with items of type Body
-        self.bodies = {}
+        # #expects dictionary with
+        # #keys: observer name
+        # #vals: array of with items of type Body
+        # self.bodies = {}
+        self.bodies = []
 
         #used to generate id's for objects not passed a name
         self.gen_obs_id = 1
@@ -152,7 +162,7 @@ class SolarSystem:
                  #fov constraints
                  fov_table=None, ra_min=0, ra_max=360, dec_min=-90, dec_max=90,
                  #if not generated
-                 name=None, origin=None,
+                 name=None, origin='@0',
                  #if generated
                  id=None, init_x=None, init_y=None, init_z=None, on_earth=None,
                  #if is_orbiting
@@ -188,9 +198,9 @@ class SolarSystem:
                         #if write outputs to text file
                         file=self.f)
                 
-                #store in SolarSystem
-                #self.active_observers[temp] = self.observers[temp]
-                self.bodies[temp] = []
+                # #store in SolarSystem
+                # #self.active_observers[temp] = self.observers[temp]
+                # self.bodies[temp] = []
 
         elif type(temp) is int:
             if int >= self.gen_obs_id:
@@ -210,9 +220,9 @@ class SolarSystem:
                         #if write outputs to text file
                         file=self.f)
                 
-                #store in SolarSystem
-                #self.active_observers[temp] = self.observers[temp]
-                self.bodies[temp] = []
+                # #store in SolarSystem
+                # #self.active_observers[temp] = self.observers[temp]
+                # self.bodies[temp] = []
 
     #add a Body instance     
     def add_body(self, is_generated,
@@ -221,7 +231,7 @@ class SolarSystem:
                  #observer, should be Observer instance
                  observer=None,
                  #if not generated
-                 name=None, origin=None, is_earth=False,
+                 name=None, origin='@0', is_earth=False,
                  #if generated
                  id=None, init_x=None, init_y=None, init_z=None, 
                  #if is_orbiting
@@ -249,8 +259,24 @@ class SolarSystem:
             temp = 'body'+str(self.gen_body_id)
             self.gen_body_id += 1
 
+        # #instantiate object
+        # self.bodies[temp_observer].append(Body(is_generated=is_generated,
+        #          #physical characteristics
+        #          diam=diam, albedo=albedo, 
+        #          #observer, should be Observer instance
+        #          observer=observer,
+        #          #if not generated
+        #          name=name, origin=origin, epochs=self.epochs, is_earth=is_earth,
+        #          #if generated
+        #          id=temp, init_x=init_x, init_y=init_y, init_z=init_z, 
+        #          #if is_orbiting
+        #          is_orbiting=is_orbiting, vect_table=vect_table, ephem_table=ephem_table, a=a, e=e, arg_per=arg_per, long_asc=long_asc, 
+        #          incl=incl, mean_anom=mean_anom, 
+        #          #if write outputs to text file
+        #          file=self.f))
+
         #instantiate object
-        self.bodies[temp_observer].append(Body(is_generated=is_generated,
+        self.bodies.append(Body(is_generated=is_generated,
                  #physical characteristics
                  diam=diam, albedo=albedo, 
                  #observer, should be Observer instance
@@ -353,7 +379,10 @@ class SolarSystem:
         self.grid_res = grid_res
 
         #convert res to AU
-        self.grid_res = self.grid_res * 6.6845871226706e-9
+        if self.grid_res is not None:
+            self.grid_res = self.grid_res * 6.6845871226706e-9
+
+        #print(f"gridpoints in 1d: { 2 * self.grid_width // self.grid_res}")
 
         #physical parameters for grid points
         self.gridp_diam = gridp_diam
@@ -376,57 +405,57 @@ class SolarSystem:
                 else:
                     print(f"ERROR: gridp_diam={self.gridp_diam} and/or gridp_albedo={self.gridp_albedo}")
 
-            #build 2d grid
-            if self.grid_type == '2d':
-                self.grid_2d = []
-                x = -self.grid_width
-                while x < self.grid_width:
-                    temp_row = []
-                    y = -self.grid_width
-                    while y < self.grid_width:
-                        temp_row.append(Body(is_generated=True,
-                                        #physical characteristics
-                                        diam=self.gridp_diam, albedo=self.gridp_albedo, 
-                                        #if generated
-                                        id=f"BODY({x},{y},{0})", init_x=x, init_y=y, init_z=0,
-                                        #file
-                                        file=self.f, write=False))
-                        self.grid_count += 1
-                        y += self.grid_res
+            # #build 2d grid
+            # if self.grid_type == '2d':
+            #     self.grid_2d = []
+            #     x = -self.grid_width
+            #     while x < self.grid_width:
+            #         temp_row = []
+            #         y = -self.grid_width
+            #         while y < self.grid_width:
+            #             temp_row.append(Body(is_generated=True,
+            #                             #physical characteristics
+            #                             diam=self.gridp_diam, albedo=self.gridp_albedo, 
+            #                             #if generated
+            #                             id=f"BODY({x},{y},{0})", init_x=x, init_y=y, init_z=0,
+            #                             #file
+            #                             file=self.f, write=False))
+            #             self.grid_count += 1
+            #             y += self.grid_res
 
-                    self.grid_2d.append(temp_row)
-                    x += self.grid_res
+            #         self.grid_2d.append(temp_row)
+            #         x += self.grid_res
 
-            #build 3d grid
-            elif self.grid_type == '3d':
-                self.grid_3d = []
-                x = -self.grid_width
-                while x < self.grid_width:
-                    temp_row = []
-                    y = -self.grid_width
-                    while y < self.grid_width:
-                        temp_col = []
-                        z = -self.grid_height
-                        while z < self.grid_height:
-                            temp_col.append(Body(is_generated=True,
-                                            #physical characteristics
-                                            diam=self.gridp_diam, albedo=self.gridp_albedo, 
-                                            #if generated
-                                            id=f"BODY({x},{y},{z})", init_x=x, init_y=y, init_z=z,
-                                            #file
-                                            file=self.f, write=False))
-                            self.grid_count += 1
-                            z += self.grid_res
-                        temp_row.append(temp_col)
-                        y += self.grid_res
-                    self.grid_3d.append(temp_row)
-                    x += self.grid_res
+            # #build 3d grid
+            # elif self.grid_type == '3d':
+            #     self.grid_3d = []
+            #     x = -self.grid_width
+            #     while x < self.grid_width:
+            #         temp_row = []
+            #         y = -self.grid_width
+            #         while y < self.grid_width:
+            #             temp_col = []
+            #             z = -self.grid_height
+            #             while z < self.grid_height:
+            #                 temp_col.append(Body(is_generated=True,
+            #                                 #physical characteristics
+            #                                 diam=self.gridp_diam, albedo=self.gridp_albedo, 
+            #                                 #if generated
+            #                                 id=f"BODY({x},{y},{z})", init_x=x, init_y=y, init_z=z,
+            #                                 #file
+            #                                 file=self.f, write=False))
+            #                 self.grid_count += 1
+            #                 z += self.grid_res
+            #             temp_row.append(temp_col)
+            #             y += self.grid_res
+            #         self.grid_3d.append(temp_row)
+            #         x += self.grid_res
 
-            else:
-                if self.f is not None:
-                    self.f.write('ERROR in run(): grid_type paramter must be None, 2d, or 3d \n')
-                else:
-                    print('ERROR in run(): grid_type parameter must be None, 2d, or 3d')
+            # else:
+            #     if self.f is not None:
+            #         self.f.write('ERROR in run(): grid_type paramter must be None, 2d, or 3d \n')
+            #     else:
+            #         print('ERROR in run(): grid_type parameter must be None, 2d, or 3d')
 
             if self.f is not None:
                 self.f.write(f"run(): GRID constructed; grid_type={self.grid_type}, grid_count={self.grid_count} \n")
@@ -526,18 +555,31 @@ class SolarSystem:
                                 if self.grid_type == '2d':
                                     app_mags = []
 
-                                    for row in self.grid_2d:
+                                    x = -self.grid_width
+                                    while x < self.grid_width:     
                                         app_mag_row = []
 
-                                        for body in row:
+                                        y = -self.grid_width
+                                        while y < self.grid_width:
+                                            temp_body = Body(is_generated=True,
+                                                             #physical characteristics
+                                                             diam=self.gridp_diam, albedo=self.gridp_albedo, 
+                                                             #if generated
+                                                             id=f"BODY({x},{y},{0})", init_x=x, init_y=y, init_z=0,
+                                                             #file
+                                                             file=self.f, write=False)
                                             #HCD in position_checks()
-                                            if position_checks(self.app_mag_observer, body, self.background['sun']):
+                                            if position_checks(self.app_mag_observer, temp_body, self.background['sun']):
                                                 app_mag_row.append(0)
                                             else:
                                                 #do app mag calcs
-                                                app_mag_row.append(get_app_mag(self.app_mag_observer, self.app_mag_band, self.background['sun'], body))
+                                                app_mag_row.append(get_app_mag(self.app_mag_observer, self.app_mag_band, self.background['sun'], temp_body))
+
+                                            y += self.grid_res
 
                                         app_mags.append(app_mag_row)
+
+                                        x += self.grid_res
 
                                     #create heatmap plot
                                     fig, ax = plt.subplots()
@@ -555,7 +597,7 @@ class SolarSystem:
                                     ax.set_yticks([])
                                     fig.colorbar(hmap)
                                     ax.set_title(f"{self.run_name}_slice{curr_slice}_appmag2d (iter={iter})")  
-                                    plt.savefig(f"outputs/{self.run_name}_slice{curr_slice}_appmag2d")
+                                    plt.savefig(f"outputs_{self.name}/{self.run_name}_slc{curr_slice}_appmag2d")
 
                                 elif self.grid_type == '3d':
                                     pass
@@ -580,29 +622,56 @@ class SolarSystem:
                                     detected = []
 
                                     if self.active_observers is not None:
-                                        for row in self.grid_2d:
+                                        x = -self.grid_width
+                                        while x < self.grid_width:
                                             detected_row = []
 
-                                            for body in row:
-                                                if is_detectable(body, self.background['sun'], self.active_observers, 
+                                            y = -self.grid_width
+                                            while y < self.grid_width:
+                                                temp_body = Body(is_generated=True,
+                                                                 #physical characteristics
+                                                                 diam=self.gridp_diam, albedo=self.gridp_albedo, 
+                                                                 #if generated
+                                                                 id=f"BODY({x},{y},{0})", init_x=x, init_y=y, init_z=0,
+                                                                 #file
+                                                                 file=self.f, write=False)
+                                                
+                                                if is_detectable(temp_body, self.background['sun'], self.active_observers, 
+                                                                 active_bands=self.active_bands):
+                                                    detected_row.append(1)
+                                                else:
+                                                    detected_row.append(0)
+                                                
+                                                y +=  self.grid_res
+                                            detected.append(detected_row)
+
+                                            x += self.grid_res
+
+                                    #use all observers, not active_observers
+                                    else:
+                                        x = -self.grid_width
+                                        while x < self.grid_width:
+                                            detected_row = []
+
+                                            y = -self.grid_width
+                                            while y < self.grid_width:
+                                                temp_body = Body(is_generated=True,
+                                                                 #physical characteristics
+                                                                 diam=self.gridp_diam, albedo=self.gridp_albedo, 
+                                                                 #if generated
+                                                                 id=f"BODY({x},{y},{0})", init_x=x, init_y=y, init_z=0,
+                                                                 #file
+                                                                 file=self.f, write=False)
+                                                
+                                                if is_detectable(temp_body, self.background['sun'], self.observers, 
                                                                  active_bands=self.active_bands):
                                                     detected_row.append(1)
                                                 else:
                                                     detected_row.append(0)
                                             detected.append(detected_row)
-                                    
-                                    #use all observers, not active_observers
-                                    else:
-                                        for row in self.grid_2d:
-                                            detected_row = []
 
-                                            for body in row:
-                                                if is_detectable(body, self.background['sun'], self.observers, 
-                                                                 active_bands=self.active_bands):
-                                                    detected_row.append(1)
-                                                else:
-                                                    detected_row.append(0)
-                                            detected.append(detected_row)           
+                                            y += self.grid_res
+                                        x += self.grid_res           
                                                     
                                     #create heatmap plot
                                     fig, ax = plt.subplots()
@@ -620,7 +689,7 @@ class SolarSystem:
                                     ax.set_yticks([])
                                     fig.colorbar(hmap)
                                     ax.set_title(f"{self.run_name}_slice{curr_slice}_obs2d (iter={iter})")  
-                                    plt.savefig(f"outputs/{self.run_name}_slice{curr_slice}_obs2d")
+                                    plt.savefig(f"outputs_{self.name}/{self.run_name}_slc{curr_slice}_obs2d")
 
                                 elif self.grid_type == '3d':
                                     pass
@@ -651,24 +720,47 @@ class SolarSystem:
                                     raw = []
 
                                     #build 3d array of apparent magnitudes
-                                    for row in self.grid_3d:
+                                    x = -self.grid_width
+                                    while x < self.grid_width:
                                         raw_row = []
-                                        for col in row:
+
+                                        y = -self.grid_width
+                                        while y < self.grid_width:
                                             raw_col = []
-                                            for body in col:
+
+                                            z = -self.grid_height
+                                            while z < self.grid_height:
+                                                temp_body = Body(is_generated=True,
+                                                                 #physical characteristics
+                                                                 diam=self.gridp_diam, albedo=self.gridp_albedo, 
+                                                                 #if generated
+                                                                 id=f"BODY({x},{y},{z})", init_x=x, init_y=y, init_z=z,
+                                                                 #file
+                                                                 file=self.f, write=False)
+
                                                 #HCD in position_checks()
-                                                if position_checks(self.app_mag_observer, body, self.background['sun']):
+                                                if position_checks(self.app_mag_observer, temp_body, self.background['sun']):
                                                     app_mag = 0
                                                 else:
                                                     #do app mag calcs
-                                                    app_mag = get_app_mag(self.app_mag_observer, self.app_mag_band, self.background['sun'], body)
+                                                    app_mag = get_app_mag(self.app_mag_observer, self.app_mag_band, self.background['sun'], temp_body)
                                                 raw_col.append(app_mag)
+
+                                                z += self.grid_res
                                             raw_row.append(raw_col)
+
+                                            y += self.grid_res
                                         raw.append(raw_row)
-                                    
+
+                                        x += self.grid_res
+
                                     #reshape array
                                     raw = np.array(raw)
-                                    np.save(f"raw_outputs/{self.run_name}_raw{curr_raw}_appmag3d", raw)
+                                    np.save(f"outputs_{self.name}/{self.run_name}_raw{curr_raw}_appmag3d", raw)
+
+                                    #ensure gargage collect
+                                    del raw
+                                    gc.collect()
 
                             #grid_type = None; no using a grid
                             else:
@@ -711,7 +803,7 @@ class SolarSystem:
                     print('ERROR: invalid anim_type')
 
             anim = FuncAnimation(self.fig, self.animate, frames=self.max_iter)
-            anim.save(f"outputs/{self.run_name}_anim_appmag2d.mp4")
+            anim.save(f"outputs_{self.name}/{self.run_name}_anim_appmag2d.mp4")
 
         # -------------------------------- FINISH run() --------------------------------- #
 
@@ -727,8 +819,10 @@ class SolarSystem:
         for obs in self.observers:
             self.observers[obs].update_xyz(step=self.step, iter=iter)
 
-            for body in self.bodies[obs]:
-                body.update_xyz(step=self.step, iter=iter)
+            # for body in self.bodies[obs]:
+            #     body.update_xyz(step=self.step, iter=iter)
+        for body in self.bodies:
+            body.update_xyz(step=self.step, iter=iter)
         
         for mb in self.background:
             self.background[mb].update_xyz(step=self.step, iter=iter)
@@ -738,8 +832,10 @@ class SolarSystem:
         for obs in self.observers:
             self.observers[obs].reset()
 
-            for body in self.bodies[obs]:
-                body.reset()
+            # for body in self.bodies[obs]:
+            #     body.reset()
+        for body in self.bodies:
+            body.reset()
         
         for mb in self.background:
             self.background[mb].reset()
@@ -790,9 +886,11 @@ class SolarSystem:
                     #configer and save plot        
                     self.ax.set_xticks([])
                     self.ax.set_yticks([])
-                    if iter == self.max_iter:
+                    if iter == self.max_iter - 1:
                         self.fig.colorbar(hmap)
-                    self.ax.set_title(f"{self.run_name}_anim_appmag2d")  
+                    #self.ax.set_title(f"{self.run_name}_anim_appmag2d") 
+                    self.ax.set_title(f"Predicted Apparent Magnitudes (diam=1km, albedo=0.06)")  
+ 
 
                 elif self.grid_type == '3d':
                     pass
@@ -808,8 +906,29 @@ class SolarSystem:
 
 
         elif self.output_type == 'observability':
-            pass
+            if self.grid_type is not None:
+                pass
+            else:
+                if self.anim_type == '2d':
+                    if self.active_observers is not None:
+                        pass
+                    else:
+                        for body in self.bodies:
+                            if is_detectable(body, self.background['sun'], self.observers):
+                                body.set_color('green')
+                            else:
+                                body.set_color('red')
 
+                        self.ax.plot(body.get_xyz()[0], body.get_xyz()[1], color=body.color, marker='o')
+                        for name in self.background:
+                            self.ax.plot(self.background[name].get_xyz()[0], self.background[name].get_xyz()[1], color='black', marker='o')
+                        
+                        #HDC, UPDATE
+                        self.ax.set_xlim(-5.5, 5.5)
+                        self.ax.set_ylim(-5.5, 5.5)
+                        self.ax.set_title('Detectability of Trojan Orbits w/ Pan-STARRS (diam=1km, albedo=0.06)')
+                    
+    
             # ---------- TO-DO: need to do observability animation output ---------- #
             #need consider both grid and not
     

@@ -39,7 +39,8 @@ def get_app_mag(observer, band, sun, body):
                                 (1 / math.pi) * math.sin(phase_angle))
     #print(f"phase_factor = {phase_factor}")
     
-    k = 2 * 1.496e8 * math.pow(10, observer.get_planmag_sun(band) / 5)
+    #k = 2 * 1.496e8 * math.pow(10, observer.get_planmag_sun(band) / 5)
+    k = 1329
     abs_mag = 5 * math.log10(k / ((body.diam) * math.sqrt(body.albedo)))
     #print(f"abs_mag = {abs_mag}")
 
@@ -64,7 +65,7 @@ def is_detectable(body, sun, observers, mode='tf', active_bands=None):
                 else:
                     bands = observers[obs].bands
                 for band in bands:
-                    if app_mag(observers[obs], band, sun, body) <= observers[obs].bands[band][1]:
+                    if get_app_mag(observers[obs], band, sun, body) <= observers[obs].bands[band][1]:
                         return True
         return False
     
@@ -79,7 +80,7 @@ def is_detectable(body, sun, observers, mode='tf', active_bands=None):
                 else:
                     bands = observers[obs].bands
                 for band in bands:
-                    app_mag = app_mag(observers[obs], band, sun, body)
+                    app_mag = get_app_mag(observers[obs], band, sun, body)
                     if app_mag <= observers[obs].bands[band][1]:
                         #store detection info
                         if obs not in info:
